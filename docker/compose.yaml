@@ -24,7 +24,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ["0"]  # Modify for multiple GPUs: ["0", "1"]
+              device_ids: ["0"] # Modify for multiple GPUs: ["0", "1"]
               capabilities: [gpu]
 
   mineru-api:
@@ -54,43 +54,47 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ["0"]  # Modify for multiple GPUs: ["0", "1"]
+              device_ids: ["0"] # Modify for multiple GPUs: ["0", "1"]
               capabilities: [gpu]
 
   mineru-router:
     image: mineru:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: mineru-router
     restart: always
     profiles: ["router"]
     ports:
-      - 8002:8002
+      - "${MINERU_ROUTER_PORT:-8002}:8000"
+    env_file: .env
     environment:
       MINERU_MODEL_SOURCE: local
+    volumes:
+      - ${MINERU_CONFIG_PATH:-../mineru.json}:/root/mineru.json:ro
+      - ${MINERU_MODEL_ROOT:-../models}:/root/models:ro
     entrypoint: mineru-router
-    command:
+    command: >
       --host 0.0.0.0
-      --port 8002
-      --local-gpus auto
-      # --allow-public-http-client  # Disabled by default; when binding to 0.0.0.0 or ::, this re-enables *-http-client backends and server_url. Enable only if you accept the SSRF risk.
-      # To aggregate existing mineru-api services instead of starting local workers:
-      # --local-gpus none
-      # --upstream-url http://mineru-api:8000
-      # --upstream-url http://mineru-api-2:8000
-      # parameters for vllm-engine
-      # --gpu-memory-utilization 0.5  # If encountering VRAM shortage, reduce the KV cache size by this parameter; if VRAM issues persist, try lowering it further to `0.4` or below.
+      --port 8000
+      --local-gpus ${MINERU_LOCAL_GPUS:-auto}
+      --enable-vlm-preload true
+      --gpu-memory-utilization ${MINERU_GPU_MEMORY_UTILIZATION:-0.2}
     ulimits:
       memlock: -1
       stack: 67108864
     ipc: host
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8002/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
     deploy:
       resources:
         reservations:
           devices:
-            - driver: nvidia
-              device_ids: ["0"]  # Modify for multiple GPUs: ["0", "1"]
-              capabilities: [gpu]
+            - capabilities: [gpu]
 
   mineru-gradio:
     image: mineru:latest
@@ -118,5 +122,5 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ["0"]  # Modify for multiple GPUs: ["0", "1"]
+              device_ids: ["0"] # Modify for multiple GPUs: ["0", "1"]
               capabilities: [gpu]
